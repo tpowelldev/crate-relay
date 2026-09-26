@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crate-relay"
+dynamic = ["version"]
+description = "Keep your MIXO playlists mirrored in Rekordbox, while Rekordbox stays in charge of BPM, beatgrids and cue points."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Tom Powell" }]
+requires-python = ">=3.9"
+classifiers = [
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+    "pyrekordbox>=0.4.4",
+    "sqlcipher3-wheels",
+    "psutil",
+]
+
+[project.optional-dependencies]
+app = ["rumps>=0.4.0", "pyobjc-framework-UserNotifications", "pyobjc-framework-ServiceManagement"]
+build = ["crate-relay[app]", "pyinstaller>=6.0"]
+dev = ["pytest", "ruff", "cairosvg", "pillow"]
+
+[project.scripts]
+crate-relay = "crate_relay.cli:main"
+
+[project.gui-scripts]
+crate-relay-app = "crate_relay.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "crate_relay.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+crate_relay = ["resources/*.png"]
+
+[tool.ruff]
+line-length = 120
+src = ["src"]
