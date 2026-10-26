@@ -7,7 +7,6 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
 
 import rumps
 
@@ -29,7 +28,7 @@ ICON = {
 SYNC_FRAMES = [f"menubar-sync-{i}.png" for i in range(8)]
 
 
-def file_signature(path: Path) -> Optional[Tuple[float, int]]:
+def file_signature(path: Path) -> tuple[float, int] | None:
     try:
         st = path.stat()
         return (st.st_mtime, st.st_size)
@@ -62,15 +61,15 @@ class CrateRelay(rumps.App):
     def __init__(self) -> None:
         super().__init__(APP_NAME, icon=macos.resource(ICON["idle"]), template=True, quit_button=None)
         self.settings = Settings.load()
-        self.results: "queue.Queue[tuple]" = queue.Queue()
+        self.results: queue.Queue[tuple] = queue.Queue()
 
-        self.busy: Optional[str] = None          # "check" | "sync" | "preview" while a job runs
-        self.result: Optional[engine.SyncResult] = None
-        self.error: Optional[str] = None
+        self.busy: str | None = None          # "check" | "sync" | "preview" while a job runs
+        self.result: engine.SyncResult | None = None
+        self.error: str | None = None
         self.planned_sig = None                  # XML signature the current result is based on
         self.needs_check = True
         self.rb_open = macos.rekordbox_is_running()
-        self.rb_closed_at: Optional[float] = None
+        self.rb_closed_at: float | None = None
         self.sync_when_closed = False
         self.in_modal = False
         self.frame = 0
@@ -99,9 +98,11 @@ class CrateRelay(rumps.App):
         self.xml_item = rumps.MenuItem("MIXO Export…", callback=self.on_choose_xml)
         self.db_item = rumps.MenuItem("Rekordbox Library…", callback=self.on_choose_db)
         self.folder_item = rumps.MenuItem("Rekordbox Folder Name…", callback=self.on_folder_name)
+        self.track_info_item = rumps.MenuItem("Update Track Info from MIXO", callback=self.on_toggle_track_info)
         self.notify_item = rumps.MenuItem("Show Notifications", callback=self.on_toggle_notifications)
         settings = rumps.MenuItem("Settings")
-        for item in (self.xml_item, self.db_item, self.folder_item, rumps.separator, self.notify_item):
+        for item in (self.xml_item, self.db_item, self.folder_item, rumps.separator,
+                     self.track_info_item, self.notify_item):
             settings.add(item)
 
         backups = rumps.MenuItem("Backups")
@@ -183,6 +184,7 @@ class CrateRelay(rumps.App):
 
         self.auto_item.state = int(s.auto_sync)
         self.notify_item.state = int(s.notifications)
+        self.track_info_item.state = int(s.track_info)
         if macos.login_item_supported():
             self.login_item.state = int(macos.login_item_enabled())
         else:
@@ -211,13 +213,13 @@ class CrateRelay(rumps.App):
         self.error = None if mode != "preview" else self.error
         self.anim.start()
         sig = file_signature(s.xml)
-        args = (mode, s.xml, s.db, s.folder_name, s.keep_backups, s.auto_sync, sig)
+        args = (mode, s.xml, s.db, s.folder_name, s.keep_backups, s.auto_sync, s.track_info, sig)
         threading.Thread(target=self._work, args=args, daemon=True).start()
         self.refresh()
 
-    def _work(self, mode, xml, db, folder, keep, auto, sig) -> None:
+    def _work(self, mode, xml, db, folder, keep, auto, track_info, sig) -> None:
         try:
-            result = engine.plan(xml, db, folder)
+            result = engine.plan(xml, db, folder, track_info=track_info)
             wants_apply = mode == "sync" or (mode == "check" and auto)
             if wants_apply and not result.in_sync:
                 if engine.rekordbox_running():
@@ -225,7 +227,9 @@ class CrateRelay(rumps.App):
                         raise engine.RekordboxRunning()
                 else:
                     self.results.put(("progress", "sync"))
-                    result = engine.sync(xml, db, backup_dir=BACKUP_DIR, folder_name=folder, keep_backups=keep)
+                    result = engine.sync(
+                        xml, db, backup_dir=BACKUP_DIR, folder_name=folder, keep_backups=keep, track_info=track_info
+                    )
             self.results.put(("done", mode, result, None, sig))
         except engine.SyncError as e:
             self.results.put(("done", mode, None, str(e), sig))
@@ -293,9 +297,15 @@ class CrateRelay(rumps.App):
     @staticmethod
     def describe(result: engine.SyncResult) -> str:
         n = len(result.changes)
-        text = f"{plural(n, 'change')} made in Rekordbox"
         if n <= 3:
             text = "; ".join(str(c) for c in result.changes)
+        elif result.tracks_updated:
+            others = n - result.tracks_updated
+            text = f"Updated info for {plural(result.tracks_updated, 'track')}"
+            if others:
+                text += f" and made {plural(others, 'playlist change')}"
+        else:
+            text = f"{plural(n, 'change')} made in Rekordbox"
         if result.missing:
             text += f". {plural(len(result.missing), 'track')} still missing from Rekordbox."
         return text
@@ -355,15 +365,15 @@ class CrateRelay(rumps.App):
             self.on_choose_xml(None)
 
     # ------------------------------------------------------------------ dialogs
-    def modal_alert(self, title: str, message: str, ok: str = "OK", cancel: Optional[str] = None) -> bool:
+    def modal_alert(self, title: str, message: str, ok: str = "OK", cancel: str | None = None) -> bool:
         self.in_modal = True
         try:
             return macos.alert(title, message, ok=ok, cancel=cancel)
         finally:
             self.in_modal = False
 
-    def modal_text(self, title: str, message: str, text: str, ok: str, cancel: Optional[str],
-                   editable: bool = False, size=(480, 200)) -> Tuple[bool, str]:
+    def modal_text(self, title: str, message: str, text: str, ok: str, cancel: str | None,
+                   editable: bool = False, size=(480, 200)) -> tuple[bool, str]:
         self.in_modal = True
         try:
             return macos.text_dialog(title, message, text, ok, cancel, editable, *size)
@@ -380,8 +390,9 @@ class CrateRelay(rumps.App):
             return
         clicked, _ = self.modal_text(
             f"{plural(len(result.changes), 'change')} to sync",
-            f"These changes will be made inside the “{self.settings.folder_name}” folder in Rekordbox. "
-            "BPM, beatgrids and cue points are never changed.",
+            f"Playlist changes are made inside the “{self.settings.folder_name}” folder in Rekordbox"
+            + (", and track info updates change only title, artist, album and genre" if result.tracks_updated else "")
+            + ". BPM, beatgrids and cue points are never changed.",
             "\n".join(str(c) for c in result.changes),
             ok="Sync Now",
             cancel="Close",
@@ -438,6 +449,32 @@ class CrateRelay(rumps.App):
         self.settings.save()
         self.needs_check = self.settings.auto_sync
         self.refresh()
+
+    def on_toggle_track_info(self, _sender) -> None:
+        s = self.settings
+        if not s.track_info and not self.modal_alert(
+            "Update track info from MIXO?",
+            "Crate Relay will also copy the title, artist, album and genre you’ve set in MIXO onto the "
+            "matching tracks in your Rekordbox collection, on every sync.\n\n"
+            "• BPM, beatgrids, cue points and key are never changed.\n"
+            "• Your music files aren’t changed, only Rekordbox’s library.\n"
+            "• Fields that are empty in MIXO are left as they are in Rekordbox.\n\n"
+            "Edits you make to these fields in Rekordbox will be replaced by MIXO’s on future syncs. "
+            "You’ll see the changes before anything is updated.",
+            ok="Turn On",
+            cancel="Cancel",
+        ):
+            return
+        s.track_info = not s.track_info
+        s.save()
+        if s.track_info and not self.busy:
+            # Show what would change straight away, rather than letting auto-sync apply it unseen.
+            self.result = None
+            self.error = None
+            self.needs_check = False
+            self.start_job("preview")
+        else:
+            self.reset_state()
 
     def on_toggle_notifications(self, _sender) -> None:
         self.settings.notifications = not self.settings.notifications
@@ -542,16 +579,15 @@ class CrateRelay(rumps.App):
             self.modal_alert("No log yet", "Nothing has been logged yet.")
 
     def on_about(self, _sender) -> None:
-        has_repo = "OWNER" not in REPO_URL
         if not self.modal_alert(
             f"{APP_NAME} {__version__}",
-            "Keeps your MIXO playlists mirrored in Rekordbox, while Rekordbox stays in charge of "
-            "BPM, beatgrids and cue points.\n\n"
+            "Keeps your MIXO playlists (and, optionally, track info) mirrored in Rekordbox, while "
+            "Rekordbox stays in charge of BPM, beatgrids and cue points.\n\n"
             "Crate Relay is an independent project and isn’t affiliated with MIXO or AlphaTheta / Pioneer DJ. "
             "It changes Rekordbox’s library file directly, so it backs it up before every change.",
             ok="OK",
-            cancel="View on GitHub" if has_repo else None,
-        ) and has_repo:
+            cancel="View on GitHub",
+        ):
             macos.open_url(REPO_URL)
 
 

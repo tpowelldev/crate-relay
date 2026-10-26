@@ -93,3 +93,116 @@ def test_backups_rotate(tmp_path):
     kept = engine.list_backups(backups)
     assert len(kept) == 2
     assert kept[0] == made[-1]
+
+
+# --------------------------------------------------------------------------- track info
+TRACK_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS Version="1.0.0">
+ <COLLECTION Entries="3">
+  <TRACK TrackID="0" Name="Warriah (VIP)" Artist="Moresounds" Album="Warriah VIP" Genre="Drum &amp; Bass"
+         Location="file://localhost/m/Moresounds%20-%20Warriah_PN.mp3"/>
+  <TRACK TrackID="1" Name="Same" Artist="Known" Genre="" Location="file://localhost/m/same.mp3"/>
+  <TRACK TrackID="2" Name="Not In Rekordbox" Location="file://localhost/m/missing.mp3"/>
+ </COLLECTION>
+ <PLAYLISTS><NODE Type="0" Name="ROOT" Count="0"/></PLAYLISTS>
+</DJ_PLAYLISTS>
+"""
+
+
+class Row:
+    def __init__(self, **kw):
+        self.rb_local_deleted = 0
+        self.__dict__.update(kw)
+
+
+class FakeDB:
+    def __init__(self):
+        self.artists = [Row(ID="a1", Name="Known")]
+        self.albums = []
+        self.genres = [Row(ID="g1", Name="House")]
+        self.content = [
+            Row(ID="c1", FolderPath="/m/Moresounds - Warriah_PN.mp3", Title="Moresounds - Warriah_PN",
+                ArtistID=None, AlbumID=None, GenreID="g1", TrackInfoUpdated="2", updated_at=None, BPM=17400),
+            Row(ID="c2", FolderPath="/m/same.mp3", Title="Same ", ArtistID="a1", AlbumID=None, GenreID="g1",
+                TrackInfoUpdated="1", updated_at=None, BPM=12800),
+        ]
+        self.flushed = False
+
+    def get_content(self):
+        return self.content
+
+    def get_artist(self):
+        return self.artists
+
+    def get_album(self):
+        return self.albums
+
+    def get_genre(self):
+        return self.genres
+
+    def _add(self, table, prefix, name):
+        row = Row(ID=f"{prefix}{len(table) + 1}", Name=name)
+        table.append(row)
+        return row
+
+    def add_artist(self, name):
+        return self._add(self.artists, "a", name)
+
+    def add_album(self, name):
+        return self._add(self.albums, "al", name)
+
+    def add_genre(self, name):
+        return self._add(self.genres, "g", name)
+
+    def flush(self):
+        self.flushed = True
+
+
+def test_reads_track_info(tmp_path):
+    p = tmp_path / "rekordbox.xml"
+    p.write_text(TRACK_XML, encoding="utf-8")
+    tracks = engine.read_mixo(p).tracks
+    assert tracks["/m/Moresounds - Warriah_PN.mp3"] == {
+        "title": "Warriah (VIP)", "artist": "Moresounds", "album": "Warriah VIP", "genre": "Drum & Bass",
+    }
+
+
+def test_track_info_preview_changes_nothing(tmp_path):
+    p = tmp_path / "rekordbox.xml"
+    p.write_text(TRACK_XML, encoding="utf-8")
+    db = FakeDB()
+    mirror = engine._Mirror(db, "MIXO", dry_run=True)
+    mirror.update_track_info(engine.read_mixo(p).tracks)
+    assert [str(c) for c in mirror.result.changes] == [
+        "Update track info for Moresounds – Warriah (VIP): title, artist, album, genre"
+    ]
+    assert db.content[0].Title == "Moresounds - Warriah_PN"
+    assert len(db.artists) == 1 and not db.flushed
+
+
+def test_track_info_apply(tmp_path):
+    p = tmp_path / "rekordbox.xml"
+    p.write_text(TRACK_XML, encoding="utf-8")
+    db = FakeDB()
+    mirror = engine._Mirror(db, "MIXO", dry_run=False)
+    mirror.update_track_info(engine.read_mixo(p).tracks)
+    c1, c2 = db.content
+    assert c1.Title == "Warriah (VIP)"
+    assert [a.Name for a in db.artists if a.ID == c1.ArtistID] == ["Moresounds"]
+    assert [g.Name for g in db.genres if g.ID == c1.GenreID] == ["Drum & Bass"]
+    assert [a.Name for a in db.albums if a.ID == c1.AlbumID] == ["Warriah VIP"]
+    assert c1.TrackInfoUpdated == "3" and c1.updated_at is not None
+    assert c1.BPM == 17400  # analysis untouched
+    # unchanged track: same title (ignoring whitespace), same artist, empty MIXO genre leaves "House" alone
+    assert c2.Title == "Same " and c2.ArtistID == "a1" and c2.GenreID == "g1" and c2.TrackInfoUpdated == "1"
+    assert mirror.result.tracks_updated == 1
+
+
+def test_track_info_reuses_existing_names(tmp_path):
+    p = tmp_path / "rekordbox.xml"
+    p.write_text(TRACK_XML, encoding="utf-8")
+    db = FakeDB()
+    db.artists.append(Row(ID="a9", Name="Moresounds"))
+    engine._Mirror(db, "MIXO", dry_run=False).update_track_info(engine.read_mixo(p).tracks)
+    assert db.content[0].ArtistID == "a9"
+    assert len(db.artists) == 2

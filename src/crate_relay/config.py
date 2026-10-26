@@ -26,13 +26,14 @@ class Settings:
     db_path: str = str(DEFAULT_DB)
     folder_name: str = "MIXO"
     auto_sync: bool = True
+    track_info: bool = False  # also copy title/artist/album/genre from MIXO
     notifications: bool = True
     keep_backups: int = 10
     welcomed: bool = False
     last_sync: str = ""  # ISO time of the last sync that changed Rekordbox
 
     @classmethod
-    def load(cls) -> "Settings":
+    def load(cls) -> Settings:
         try:
             data = json.loads(SETTINGS_FILE.read_text())
         except (OSError, ValueError):

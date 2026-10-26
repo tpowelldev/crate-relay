@@ -20,7 +20,8 @@ Crate Relay does one job: it watches the XML that MIXO auto-exports and rebuilds
 ## Features
 
 - **Automatic**: syncs whenever MIXO re-exports, as soon as Rekordbox is closed. If Rekordbox is open, changes wait and sync the moment you quit it.
-- **Playlists only**: never changes BPM, beatgrids, cue points, key, tags, ratings or anything outside its own folder.
+- **Rekordbox keeps its analysis**: never changes BPM, beatgrids, cue points or key, or playlists outside its own folder.
+- **Track info from MIXO (optional)**: copies the title, artist, album and genre you've set in MIXO onto the matching tracks in Rekordbox, so renames and genre changes in MIXO show up without writing tags to your files.
 - **Backs up first**: copies your Rekordbox library before every change (the last 10 are kept) and restores a backup from the menu.
 - **Preview changes** before syncing, and **Sync Now** on demand. It can quit Rekordbox for you.
 - **Missing tracks**: lists tracks that are in your MIXO playlists but not yet in your Rekordbox collection. Add them to Rekordbox and they join their playlists on the next sync.
@@ -54,6 +55,17 @@ Some rules of thumb:
 - **New tracks need adding to Rekordbox once** (drag them into Collection so Rekordbox analyses them). Until then they're listed under *tracks not in Rekordbox yet* in the menu.
 - **Don't use MIXO's direct "Rekordbox" export** (the one that writes `master.db`) alongside this. It writes MIXO's cues and beatgrids into Rekordbox, which is exactly what Crate Relay avoids.
 
+### Track info (optional)
+
+MIXO keeps your edits to titles, artists and genres in its own library, not in the music files, so Rekordbox doesn't see them when you add a track. Turn on **Settings → Update Track Info from MIXO** and every sync also copies the **title, artist, album and genre** from MIXO onto the matching tracks in your Rekordbox collection (matched by file path, like the playlists).
+
+- BPM, beatgrids, cue points and key are never changed, and nor are your music files.
+- A field that's empty in MIXO is left as it is in Rekordbox.
+- MIXO wins: if you edit one of these fields in Rekordbox, the next sync puts MIXO's value back. Make those edits in MIXO instead.
+- Use **Preview Changes** to see which tracks would be updated before turning it on.
+
+From the command line, add `--track-info`.
+
 ### Menu bar icon
 
 | Icon | Meaning |
@@ -71,7 +83,7 @@ Crate Relay edits Rekordbox's library database directly, using [pyrekordbox](htt
 - It only writes while Rekordbox is closed.
 - It backs up `master.db` and `masterPlaylists6.xml` before every change, to `~/Library/Application Support/Crate Relay/Backups`.
 - It only ever creates, reorders or deletes playlists and folders inside its own top-level folder, and only adds or removes entries in those playlists.
-- It never creates, edits or deletes tracks.
+- It never adds or deletes tracks. With track info turned on, the only track fields it changes are title, artist, album and genre (adding artist, album and genre names to Rekordbox's lists when needed).
 
 To undo a sync, choose **Backups → Restore a Backup…**. Rekordbox also keeps its own `master.backup.db` files in `~/Library/Pioneer/rekordbox/`.
 
@@ -85,6 +97,7 @@ The sync engine also works without the app:
 pip install crate-relay            # or: pip install -e . from a clone
 crate-relay                        # preview what would change
 crate-relay --apply                # sync (Rekordbox must be closed)
+crate-relay --apply --track-info   # also copy title/artist/album/genre from MIXO
 crate-relay --json                 # machine-readable result
 crate-relay --help
 ```
@@ -94,7 +107,7 @@ crate-relay --help
 Requires macOS 11+ and Python 3.9+ (the Xcode Command Line Tools Python, python.org or Homebrew).
 
 ```sh
-git clone https://github.com/OWNER/crate-relay.git
+git clone https://github.com/tpowelldev/crate-relay.git
 cd crate-relay
 ./scripts/build.sh          # creates .venv, builds dist/Crate Relay.app and a release zip
 open "dist/Crate Relay.app"

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 — 2026-10-25
+
+- New, optional: **Update Track Info from MIXO** (Settings menu, or `--track-info` on the command line) copies the title, artist, album and genre from MIXO onto the matching tracks in Rekordbox on every sync. BPM, beatgrids, cue points, key and the music files are never changed; empty MIXO fields are ignored.
+- Preview Changes and notifications include track info updates.
+- About window links to the GitHub repo.
+- CI pins ruff so new ruff releases can't break the build.
+
 ## 1.0.0 — 2026-09-26
 
 First release.

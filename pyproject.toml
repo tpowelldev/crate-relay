@@ -24,7 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 app = ["rumps>=0.4.0", "pyobjc-framework-UserNotifications", "pyobjc-framework-ServiceManagement"]
 build = ["crate-relay[app]", "pyinstaller>=6.0"]
-dev = ["pytest", "ruff", "cairosvg", "pillow"]
+dev = ["pytest", "ruff==0.16.9", "cairosvg", "pillow"]
 
 [project.scripts]
 crate-relay = "crate_relay.cli:main"
@@ -43,4 +43,9 @@ crate_relay = ["resources/*.png"]
 
 [tool.ruff]
 line-length = 120
+target-version = "py39"
 src = ["src"]
+
+[tool.ruff.lint]
+# Explicit rules, so a new ruff release can't change what CI checks.
+select = ["E", "F", "W", "I", "B", "UP"]

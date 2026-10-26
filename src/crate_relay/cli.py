@@ -14,13 +14,19 @@ def main(argv: list | None = None) -> int:
     s = Settings.load()
     ap = argparse.ArgumentParser(
         prog="crate-relay",
-        description="Mirror MIXO playlists into Rekordbox (playlists only; track analysis is never touched).",
+        description="Mirror MIXO playlists (and optionally track info) into Rekordbox. "
+        "BPM, beatgrids and cue points are never touched.",
     )
     ap.add_argument("--apply", action="store_true", help="write the changes (default: preview only)")
     ap.add_argument("--json", action="store_true", help="print the result as JSON")
     ap.add_argument("--xml", type=Path, default=s.xml, help=f"MIXO Rekordbox XML export (default: {s.xml})")
     ap.add_argument("--db", type=Path, default=s.db, help=f"Rekordbox master.db (default: {s.db})")
     ap.add_argument("--folder", default=s.folder_name, help=f"Rekordbox folder to sync into (default: {s.folder_name})")
+    ap.add_argument(
+        "--track-info", action=argparse.BooleanOptionalAction, default=s.track_info,
+        help="also copy title, artist, album and genre from MIXO onto Rekordbox tracks "
+             f"(default: {'on' if s.track_info else 'off'}, from the app's settings)",
+    )
     ap.add_argument("--no-backup", action="store_true", help="skip the backup before writing")
     ap.add_argument("--version", action="version", version=f"crate-relay {__version__}")
     args = ap.parse_args(argv)
@@ -31,10 +37,10 @@ def main(argv: list | None = None) -> int:
             result = engine.sync(
                 args.xml, args.db,
                 backup_dir=None if args.no_backup else BACKUP_DIR,
-                folder_name=args.folder, keep_backups=s.keep_backups,
+                folder_name=args.folder, keep_backups=s.keep_backups, track_info=args.track_info,
             )
         else:
-            result = engine.plan(args.xml, args.db, folder_name=args.folder)
+            result = engine.plan(args.xml, args.db, folder_name=args.folder, track_info=args.track_info)
     except engine.SyncError as e:
         if args.json:
             print(json.dumps({"error": str(e)}))
@@ -49,6 +55,8 @@ def main(argv: list | None = None) -> int:
     for c in result.changes:
         print(f"  {c}")
     summary = f"{result.playlists} playlists, {result.entries} tracks."
+    if result.tracks_updated:
+        summary += f" Track info {'updated' if result.applied else 'to update'}: {result.tracks_updated} tracks."
     if result.in_sync:
         print(f"Rekordbox matches MIXO. {summary}")
     elif result.applied:

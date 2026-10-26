@@ -7,7 +7,6 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from AppKit import (
     NSAlert,
@@ -53,7 +52,7 @@ def activate() -> None:
 
 
 # --------------------------------------------------------------------------- dialogs
-def alert(title: str, message: str, ok: str = "OK", cancel: Optional[str] = None) -> bool:
+def alert(title: str, message: str, ok: str = "OK", cancel: str | None = None) -> bool:
     """Standard alert. Returns True if the first (default) button was clicked."""
     a = NSAlert.alloc().init()
     a.setMessageText_(title)
@@ -65,8 +64,8 @@ def alert(title: str, message: str, ok: str = "OK", cancel: Optional[str] = None
     return a.runModal() == NSAlertFirstButtonReturn
 
 
-def text_dialog(title: str, message: str, text: str, ok: str, cancel: Optional[str] = None,
-                editable: bool = False, width: int = 480, height: int = 200) -> Tuple[bool, str]:
+def text_dialog(title: str, message: str, text: str, ok: str, cancel: str | None = None,
+                editable: bool = False, width: int = 480, height: int = 200) -> tuple[bool, str]:
     """Alert with a scrollable text box (or a one-line field if height is 0)."""
     a = NSAlert.alloc().init()
     a.setMessageText_(title)
@@ -150,7 +149,7 @@ def copy_text(text: str) -> None:
     pb.setString_forType_(text, NSPasteboardTypeString)
 
 
-def choose_file(title: str, start: Path, extensions: List[str]) -> Optional[Path]:
+def choose_file(title: str, start: Path, extensions: list[str]) -> Path | None:
     panel = NSOpenPanel.openPanel()
     panel.setTitle_(title)
     panel.setMessage_(title)
@@ -171,7 +170,7 @@ def choose_file(title: str, start: Path, extensions: List[str]) -> Optional[Path
     return None
 
 
-def choose_folder(title: str, start: Path) -> Optional[Path]:
+def choose_folder(title: str, start: Path) -> Path | None:
     panel = NSOpenPanel.openPanel()
     panel.setTitle_(title)
     panel.setMessage_(title)

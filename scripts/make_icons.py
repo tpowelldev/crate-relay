@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Generate every icon asset from code, so the artwork is reproducible and editable.
 
@@ -61,7 +60,8 @@ ARCS = [(198, 328), (18, 148)]
 def app_icon_svg() -> str:
     cx = cy = 512
     grooves = "\n".join(
-        f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="#fff" stroke-opacity="{0.035 + 0.02 * (i % 3 == 0):.3f}" stroke-width="1.6"/>'
+        f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="#fff" '
+        f'stroke-opacity="{0.035 + 0.02 * (i % 3 == 0):.3f}" stroke-width="1.6"/>'
         for i, r in enumerate(range(118, 244, 7))
     )
 
@@ -110,7 +110,8 @@ def app_icon_svg() -> str:
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#glow)"/>
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#gloss)"/>
-  <rect x="101.5" y="101.5" width="821" height="821" rx="185" fill="none" stroke="#fff" stroke-opacity="0.10" stroke-width="3"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="185"
+        fill="none" stroke="#fff" stroke-opacity="0.10" stroke-width="3"/>
   <circle cx="{cx}" cy="{cy + 10}" r="252" fill="#000" fill-opacity="0.35"/>
   <circle cx="{cx}" cy="{cy}" r="250" fill="url(#vinyl)"/>
   {grooves}
@@ -146,7 +147,8 @@ def build_app_icon() -> None:
             px = base * scale
             name = f"icon_{base}x{base}{'@2x' if scale == 2 else ''}.png"
             icon.resize((px, px), Image.LANCZOS).save(iconset / name)
-    icon.save(ASSETS / "AppIcon.icns", sizes=[(16, 16), (32, 32), (64, 64), (128, 128), (256, 256), (512, 512), (1024, 1024)])
+    icns_sizes = [(s, s) for s in (16, 32, 64, 128, 256, 512, 1024)]
+    icon.save(ASSETS / "AppIcon.icns", sizes=icns_sizes)
 
 
 # --------------------------------------------------------------------------- menu bar icons
@@ -202,7 +204,8 @@ def badge(img: Image.Image, kind: str) -> Image.Image:
         b = Image.new("RGBA", (MB, MB), (0, 0, 0, 0))
         b.putalpha(a)
     else:
-        svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {MB} {MB}"><circle cx="{cx}" cy="{cy}" r="{r}" fill="#000"/></svg>'
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {MB} {MB}">'
+               f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="#000"/></svg>')
         b = render(svg, MB)
     return Image.alpha_composite(out, b)
 
